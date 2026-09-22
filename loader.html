@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Godot Game</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: black; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; }
+        canvas { display: block; }
+        #status { position: absolute; }
+    </style>
+</head>
+<body>
+    <div id="status">Loading...</div>
+    <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+    
+    <script>
+        const JSDELIVR_BASE = "https://cdn.jsdelivr.net/gh/YOUR_GITHUB_USER/YOUR_REPO_NAME@main/games/geo/";
+        
+        async function fetchChunks(filename, numChunks) {
+            let totalLength = 0;
+            const chunks = [];
+            
+            for (let i = 0; i < numChunks; i++) {
+                document.getElementById('status').innerText = `Downloading ${filename} part ${i+1}/${numChunks}...`;
+                const response = await fetch(`${JSDELIVR_BASE}${filename}.part${i}`);
+                if (!response.ok) throw new Error(`Failed to load chunk ${i}`);
+                const buffer = await response.arrayBuffer();
+                chunks.push(new Uint8Array(buffer));
+                totalLength += buffer.byteLength;
+            }
+            
+            const combined = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const chunk of chunks) {
+                combined.set(chunk, offset);
+                offset += chunk.byteLength;
+            }
+            return combined;
+        }
+
+        async function initGame() {
+            try {
+                // WASM is 69MB -> ~4 chunks of 20MB
+                const wasmData = await fetchChunks('gd_web.wasm', 4);
+                // DATA is 314MB -> ~16 chunks of 20MB
+                const gameData = await fetchChunks('gd_web.data', 16);
+                
+                document.getElementById('status').innerText = "Loading engine...";
+                
+                // Inject the WASM and DATA into Godot's JS environment
+                // Note: Godot's JS usually expects to fetch these itself. 
+                // We'll have to override the fetch or instantiate it manually depending on the Godot version.
+                
+                // This is a basic template. You will need to load gd_web.js dynamically after this.
+                window.Module = {
+                    canvas: document.getElementById('canvas'),
+                    wasmBinary: wasmData,
+                    // Godot 3/4 requires setting up the virtual file system for .data
+                    setStatus: function(text) {
+                        if(text) document.getElementById('status').innerText = text;
+                        else document.getElementById('status').style.display = 'none';
+                    }
+                };
+
+                const script = document.createElement('script');
+                script.src = `${JSDELIVR_BASE}gd_web.js`;
+                document.body.appendChild(script);
+
+            } catch (e) {
+                document.getElementById('status').innerText = `Error: ${e.message}`;
+                console.error(e);
+            }
+        }
+        
+        initGame();
+    </script>
+</body>
+</html>
